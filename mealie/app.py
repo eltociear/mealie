@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +15,7 @@ from mealie.routes.media import media_router
 from mealie.services.scheduler import SchedulerRegistry, SchedulerService, tasks
 
 settings = get_app_settings()
+logger = get_logger()
 
 description = f"""
 Mealie is a web application for managing your recipes, meal plans, and shopping lists. This is the Restful
@@ -39,12 +42,40 @@ community members. If you'd like to file an issue, please use the
 - [Beta](https://demo.mealie.io)
 """
 
+
+@asynccontextmanager
+async def system_startup(_: FastAPI):
+    await start_scheduler()
+
+    logger.info("-----SYSTEM STARTUP-----")
+    logger.info("------APP SETTINGS------")
+    logger.info(
+        settings.json(
+            indent=4,
+            exclude={
+                "SECRET",
+                "SFTP_PASSWORD",
+                "SFTP_USERNAME",
+                "DB_URL",  # replace by DB_URL_PUBLIC for logs
+                "DB_PROVIDER",
+                "SMTP_USER",
+                "SMTP_PASSWORD",
+            },
+        )
+    )
+
+    yield
+
+    logger.info("-----SYSTEM SHUTDOWN----- \n")
+
+
 app = FastAPI(
     title="Mealie",
     description=description,
     version=APP_VERSION,
     docs_url=settings.DOCS_URL,
     redoc_url=settings.REDOC_URL,
+    lifespan=system_startup,
 )
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -103,31 +134,9 @@ for route in app.routes:
         route.tags = list(set(route.tags))
 
 
-@app.on_event("startup")
-async def system_startup():
-    logger = get_logger()
-
-    await start_scheduler()
-
-    logger.info("-----SYSTEM STARTUP----- \n")
-    logger.info("------APP SETTINGS------")
-    logger.info(
-        settings.json(
-            indent=4,
-            exclude={
-                "SECRET",
-                "SFTP_PASSWORD",
-                "SFTP_USERNAME",
-                "DB_URL",  # replace by DB_URL_PUBLIC for logs
-                "DB_PROVIDER",
-                "SMTP_USER",
-                "SMTP_PASSWORD",
-            },
-        )
-    )
-
 
 def main():
+    logger.info("system startup from main, initiating uvicorn...")
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
