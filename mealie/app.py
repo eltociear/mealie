@@ -134,7 +134,6 @@ for route in app.routes:
         route.tags = list(set(route.tags))
 
 
-
 def main():
     logger.info("system startup from main, initiating uvicorn...")
     uvicorn.run(
